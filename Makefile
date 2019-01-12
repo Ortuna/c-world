@@ -1,14 +1,17 @@
-SRC_DIR   := "src"
-BUILD_DIR := "build"
-SOURCES   := $(shell find $(SRC_DIR) -type f -name "*.c")
+SRC     := src
+BUILD   := build
+SOURCES := $(shell find $(SRC) -type f -name "*.c")
 
-.PHONY: all clean src/*
+CFLAGS = -Wall -I src -lm
 
-$(SOURCES): SRC_FILE = $(shell echo $@ | sed "s#$(SRC_DIR)/##g")
+.PHONY: clean $(SOURCES)
+
 $(SOURCES):
-	$(CC) $(CFLAGS) $@ -o ./build/$(SRC_FILE).o
+	$(CC) $(CFLAGS) $(LDFLAGS) $(SOURCES) -o $(BUILD)/c-world
+
+run:
+	./build/c-world
 
 clean:
-	-rm ./build/*
-	
-	
+	-rm -r ./$(BUILD)/*
+
