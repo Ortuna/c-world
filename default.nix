@@ -8,6 +8,14 @@ stdenv.mkDerivation {
     openssl
     cmake
     gcc
+    gnuplot
+    valgrind
+
+    liquid-dsp
+    hackrf
+    inspectrum
+
+    octave
   ];
 
   shellHook = "

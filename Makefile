@@ -2,7 +2,7 @@ SRC     := src
 BUILD   := build
 SOURCES := $(shell find $(SRC) -type f -name "*.c")
 
-CFLAGS = -Wall -I src -lm
+CFLAGS = -Wall -I src -lm -lliquid
 
 .PHONY: clean $(SOURCES)
 

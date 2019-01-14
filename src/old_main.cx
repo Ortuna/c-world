@@ -1,0 +1,182 @@
+#include <stdio.h>
+#include <stdlib.h>
+#include <math.h>
+#include <string.h>
+
+#include "liquid/liquid.h"
+
+typedef struct iq_data {
+  uint8_t original_i;
+  uint8_t original_q;
+  float i;
+  float q;
+  float x;
+  float y;
+
+  float amp_i;
+  float amp_q;
+} IQ;
+
+typedef struct iq_signal {
+  IQ **iq_data;
+  int length;
+} IQ_SIGNAL;
+
+typedef int8_t i_t;
+
+void calculate_i_q_amp(IQ *data, double f) {
+  int sampling_freq = 2500000;
+  int center_freq = 100122000;
+  float t = (float) f/sampling_freq;
+
+  data->amp_i = data->i * cos(2 * M_PI * center_freq * t);
+  data->amp_q = data->q * sin(2 * M_PI * center_freq * t);
+}
+
+void calculate_x_y(IQ *data) {
+  float magnitude = sqrt(pow(data->i, 2) + pow(data->q, 2));
+
+  float phase = 0.0;
+  phase = atan(data->q / data->i);
+
+  data->x = magnitude * cos(phase);
+  data->y = magnitude * sin(phase);
+}
+
+void fft_signal(IQ_SIGNAL *signal) {
+  int n = signal->length;
+  int flags=0;                    // FFT flags (typically ignored)
+
+  float complex *x = (float complex*) malloc(n*sizeof(float complex));
+  float complex *y = (float complex*) malloc(n*sizeof(float complex));
+
+
+  for (int i=0; i < signal->length; i++) {
+    x[i] = signal->iq_data[i]->i;
+    y[i] = signal->iq_data[i]->q;
+  }
+
+  fftplan plan = fft_create_plan(1024, x, y, LIQUID_FFT_FORWARD,  flags);
+
+  fft_execute(plan);
+  fft_destroy_plan(plan);
+
+  for (int i=0; i < n; i++){
+    signal->iq_data[i]->i = x[i];
+    signal->iq_data[i]->q = y[i];
+  }
+
+  free(x);
+  free(y);
+}
+
+void iir_filter(IQ_SIGNAL *signal) {
+  float alpha = 5;
+
+  for (int i=0; i < signal->length; i++){
+    // signal->iq_data[i]->i;
+    signal->iq_data[i]->q += alpha * (signal->iq_data[i]->i - signal->iq_data[i]->q);
+  }
+}
+
+
+IQ** read_IQ_file(char *path, int *length) {
+  FILE *input_file = fopen(path, "r");
+  int  known_points;
+
+  fseek(input_file, 0L, SEEK_END);
+  known_points = (int) ftell(input_file) / sizeof(i_t);
+  rewind(input_file);
+
+  IQ **output = malloc(known_points * sizeof(IQ *));
+
+  int position = 0;
+  uint8_t sample = 0;
+
+  while (!feof(input_file)) {
+    output[position] = malloc(sizeof(IQ));
+
+    fread(&sample, sizeof(i_t), 1, input_file);
+    output[position]->i = (float) sample;
+    output[position]->original_i = sample;
+
+    fread(&sample, sizeof(i_t), 1, input_file);
+    output[position]->q = (float) sample;
+    output[position]->original_q = sample;
+
+    position++;
+  }
+
+  fclose(input_file);
+
+  *length = position -1;
+  return output;
+}
+
+void write_signal_file(char *path, IQ **data, int length) {
+  FILE *file = fopen(path, "w");
+
+  for(int i = 0; i < length; i++) {
+    // fprintf(file, "%f %f\n", data[i]->i, data[i]->q);
+    // fprintf(file, "%f %f\n", data[i]->amp_i, data[i]->amp_q);
+    fprintf(file, "%f %f\n", data[i]->x, data[i]->y);
+    // fprintf(file, "%f\n", data[i]->magnitude);
+  }
+
+  fclose(file);
+}
+
+void write_iq_file(char *path, IQ **data, int length) {
+  FILE *file = fopen(path, "w");
+
+  uint8_t set = 0;
+
+  for(int i = 0; i < length; i++) {
+    // fprintf(file, "%f %f\n", data[i]->i, data[i]->q);
+    // fprintf(file, "%f %f\n", data[i]->amp_i, data[i]->amp_q);
+    set = data[i]->original_i;
+    fprintf(file, "%d", set);
+
+    set = data[i]->original_q;
+    fprintf(file, "%d", set);
+    // fprintf(file, "%f\n", data[i]->magnitude);
+  }
+
+  fclose(file);
+}
+
+IQ_SIGNAL* read_file(char *path) {
+  IQ_SIGNAL *signal = malloc(sizeof(IQ_SIGNAL));
+
+  signal->iq_data = read_IQ_file(path, &signal->length);
+
+  return signal;
+}
+
+void free_signal(IQ_SIGNAL *signal) {
+  for(int i = 0; i < signal->length; i++) {
+    free(signal->iq_data[i]);
+  }
+
+  free(signal->iq_data);
+  free(signal);
+}
+
+int main() {
+  //IQ_SIGNAL *signal = read_file("./assets/FMcapture1.dat");
+  IQ_SIGNAL *signal = read_file("./assets/o.raw");
+
+  // fft_signal(signal);
+  // iir_filter(signal);
+
+  for(int i = 0; i < signal->length; i++) {
+    calculate_x_y(signal->iq_data[i]);
+  }
+
+  //write_signal_file("./build/output.dat", signal->iq_data, 9000);
+  write_iq_file("./build/output.raw", signal->iq_data, 9000);
+
+  free_signal(signal);
+  return 0;
+}
+
